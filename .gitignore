@@ -6,3 +6,5 @@ target
 *.iml
 .idea
 *.versionsBackup
+.history
+

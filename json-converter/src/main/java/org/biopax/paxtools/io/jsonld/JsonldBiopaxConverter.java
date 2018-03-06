@@ -15,7 +15,6 @@ import org.apache.jena.riot.Lang;
 import org.apache.jena.riot.RDFDataMgr;
 import org.biopax.paxtools.io.SimpleIOHandler;
 import org.biopax.paxtools.model.BioPAXLevel;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -122,5 +121,24 @@ public class JsonldBiopaxConverter implements JsonldConverter {
 		LOG.info("BIOPAX Conversion finished " + sdf.format(Calendar.getInstance().getTime()));
 		return fullUriBiopaxInput;
 	}
+	
+	
 
+    public static void main(String[] argv) throws Exception	{
+    
+    	if( argv.length != 2 ) {
+    		System.out.println("USAGE JsonldBiopaxConverter <xmlFile> <jsonLdFile>");
+    		System.exit(0);
+    	}
+    	
+		File inFile = new File( argv[0] );
+		File outFile = new File( argv[1] );
+
+		JsonldConverter intf = new JsonldBiopaxConverter();
+
+		// convert owl test file in resource directory to jsonld format
+		InputStream in = new FileInputStream(inFile);
+		intf.convertToJsonld(in, new FileOutputStream(outFile));
+
+    }
 }

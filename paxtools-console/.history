@@ -1,0 +1,5 @@
+2017-05-10T15:07:40.Gullys-Mac.local ls target/
+2017-05-10T15:08:07.Gullys-Mac.local java -jar target/paxtools.jar 
+2017-05-10T15:08:17.Gullys-Mac.local ls -lh
+2017-05-10T15:08:22.Gullys-Mac.local ls -lh target/
+2017-05-10T15:15:20.Gullys-Mac.local ls target/

@@ -1,32 +1,92 @@
 package org.biopax.paxtools;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
+import java.io.FilenameFilter;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.PrintStream;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
+import java.util.TreeSet;
+import java.util.zip.GZIPInputStream;
+
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.filefilter.DirectoryFileFilter;
+import org.apache.commons.io.filefilter.RegexFileFilter;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.mutable.MutableInt;
-import org.biopax.paxtools.controller.*;
+import org.biopax.paxtools.client.BiopaxValidatorClient;
+import org.biopax.paxtools.client.BiopaxValidatorClient.RetFormat;
+import org.biopax.paxtools.controller.Cloner;
+import org.biopax.paxtools.controller.Completer;
+import org.biopax.paxtools.controller.Fetcher;
+import org.biopax.paxtools.controller.Integrator;
+import org.biopax.paxtools.controller.Merger;
+import org.biopax.paxtools.controller.ModelUtils;
+import org.biopax.paxtools.controller.PathAccessor;
+import org.biopax.paxtools.controller.PropertyEditor;
+import org.biopax.paxtools.controller.SimpleEditorMap;
 import org.biopax.paxtools.converter.LevelUpgrader;
 import org.biopax.paxtools.converter.psi.PsiToBiopax3Converter;
-import org.biopax.paxtools.io.*;
+import org.biopax.paxtools.io.BioPAXIOHandler;
+import org.biopax.paxtools.io.SimpleIOHandler;
 import org.biopax.paxtools.io.gsea.GSEAConverter;
 import org.biopax.paxtools.io.sbgn.L3ToSBGNPDConverter;
 import org.biopax.paxtools.io.sbgn.ListUbiqueDetector;
 import org.biopax.paxtools.io.sbgn.UbiqueDetector;
-import org.biopax.paxtools.model.*;
+import org.biopax.paxtools.model.BioPAXElement;
+import org.biopax.paxtools.model.BioPAXLevel;
+import org.biopax.paxtools.model.Model;
 import org.biopax.paxtools.model.level2.entity;
-import org.biopax.paxtools.model.level3.*;
-import org.biopax.paxtools.pattern.miner.*;
+import org.biopax.paxtools.model.level3.ControlledVocabulary;
+import org.biopax.paxtools.model.level3.Entity;
+import org.biopax.paxtools.model.level3.EntityReference;
+import org.biopax.paxtools.model.level3.Gene;
+import org.biopax.paxtools.model.level3.NucleicAcid;
+import org.biopax.paxtools.model.level3.NucleicAcidReference;
+import org.biopax.paxtools.model.level3.Pathway;
+import org.biopax.paxtools.model.level3.Protein;
+import org.biopax.paxtools.model.level3.ProteinReference;
+import org.biopax.paxtools.model.level3.Provenance;
+import org.biopax.paxtools.model.level3.PublicationXref;
+import org.biopax.paxtools.model.level3.SequenceEntityReference;
+import org.biopax.paxtools.model.level3.SimplePhysicalEntity;
+import org.biopax.paxtools.model.level3.SmallMolecule;
+import org.biopax.paxtools.model.level3.SmallMoleculeReference;
+import org.biopax.paxtools.model.level3.Xref;
+import org.biopax.paxtools.pattern.miner.BlacklistGenerator3;
+import org.biopax.paxtools.pattern.miner.ConfigurableIDFetcher;
+import org.biopax.paxtools.pattern.miner.CustomFormat;
+import org.biopax.paxtools.pattern.miner.Dialog;
+import org.biopax.paxtools.pattern.miner.ExtendedSIFWriter;
+import org.biopax.paxtools.pattern.miner.OutputColumn;
+import org.biopax.paxtools.pattern.miner.SIFEnum;
+import org.biopax.paxtools.pattern.miner.SIFInteraction;
+import org.biopax.paxtools.pattern.miner.SIFSearcher;
+import org.biopax.paxtools.pattern.miner.SIFType;
 import org.biopax.paxtools.pattern.util.Blacklist;
 import org.biopax.paxtools.query.QueryExecuter;
 import org.biopax.paxtools.query.algorithm.Direction;
-import org.biopax.paxtools.client.BiopaxValidatorClient;
-import org.biopax.paxtools.client.BiopaxValidatorClient.RetFormat;
 import org.biopax.paxtools.util.ClassFilterSet;
 import org.biopax.validator.jaxb.Behavior;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.*;
-import java.lang.reflect.Method;
-import java.util.*;
-import java.util.zip.GZIPInputStream;
 
 /**
  * Paxtools console application
@@ -173,6 +233,28 @@ public class PaxtoolsMain {
     public static void toLevel3(String[] argv) throws IOException {
     	final String input = argv[1];
     	final String output = argv[2];
+    	
+    	File in = new File(input);
+    	File out = new File(output);
+    	if( in.isDirectory() ) {
+    		if( !out.exists() ) 
+    			out.mkdirs();
+    		if( !out.isDirectory() ) 
+    			throw new IOException("If <input> is a directory, then so must be <output>");
+    		
+    		Collection<File> files = FileUtils.listFiles(
+    				  in, 
+    				  new RegexFileFilter("^(.*?\\.xml)$"), 
+    				  DirectoryFileFilter.DIRECTORY
+    				);
+    		for( File f : files) {
+    			System.out.print(f.getPath());
+    			String outName = f.getName().replaceAll("\\.xml", "_biopax.rdf");
+    			String[] new_args = {"toLevel3", f.getPath(), output + "/" + outName};
+    			toLevel3(new_args);
+    		}
+    	}
+    	
     	InputStream is = getInputStream(input);
     	FileOutputStream os = new FileOutputStream(output);
     	
@@ -1095,7 +1177,7 @@ public class PaxtoolsMain {
 		}
 	};
 
-	private static boolean implementsInterface(Class clazz, Class inter)
+	private static boolean implementsInterface(Class clazz, Class<ControlledVocabulary> inter)
 	{
 		for (Class anInter : clazz.getInterfaces())
 		{
